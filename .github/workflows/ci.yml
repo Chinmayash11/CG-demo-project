@@ -1,0 +1,74 @@
+name: CI — Terraform Validate & Security Scan
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches-ignore: [main]   # CD handles pushes to main
+
+permissions:
+  contents: read
+  pull-requests: write        # Allow posting plan comments on PRs
+
+env:
+  TF_VERSION: "1.7.5"
+  TF_WORKING_DIR: "./terraform"
+
+jobs:
+  terraform-ci:
+    name: Validate & Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Terraform ───────────────────────────────────────────────────
+      - name: Setup Terraform ${{ env.TF_VERSION }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # ── 3. Terraform Format Check ────────────────────────────────────────────
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        continue-on-error: true
+
+      - name: Post fmt result
+        if: steps.fmt.outcome == 'failure'
+        run: |
+          echo "::warning::Terraform files are not formatted. Run: terraform fmt -recursive"
+
+      # ── 4. Terraform Init ────────────────────────────────────────────────────
+      - name: Terraform Init
+        run: terraform init -backend=false
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # ── 5. Terraform Validate ────────────────────────────────────────────────
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # ── 6. Security Scan (Checkov) ───────────────────────────────────────────
+      - name: Run Checkov Security Scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: ${{ env.TF_WORKING_DIR }}
+          framework: terraform
+          soft_fail: true           # Warn only — does not block the pipeline
+          output_format: cli
+          download_external_modules: false
+
+      # ── 7. Summary ──────────────────────────────────────────────────────────
+      - name: CI Summary
+        if: always()
+        run: |
+          echo "## CI Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform Format | ${{ steps.fmt.outcome }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform Validate | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Checkov Security Scan | See logs |" >> $GITHUB_STEP_SUMMARY

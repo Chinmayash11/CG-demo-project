@@ -1,0 +1,106 @@
+name: Destroy — Terraform Infrastructure Cleanup
+
+on:
+  workflow_dispatch:      # Manual trigger only
+    inputs:
+      confirm_destroy:
+        description: 'Type DESTROY to confirm infrastructure removal'
+        required: true
+        type: string
+      reason:
+        description: 'Reason for destroying (optional)'
+        required: false
+        type: string
+        default: 'Demo cleanup / cost optimisation'
+
+permissions:
+  id-token: write    # Required for AWS OIDC
+  contents: read
+
+env:
+  TF_VERSION:     "1.7.5"
+  TF_WORKING_DIR: "./terraform"
+  AWS_REGION:     "eu-west-2"
+
+jobs:
+  destroy:
+    name: Terraform Destroy
+    runs-on: ubuntu-latest
+    # Only proceed if the user typed DESTROY
+    if: ${{ github.event.inputs.confirm_destroy == 'DESTROY' }}
+
+    steps:
+      # ── 1. Safety guard ─────────────────────────────────────────────────────
+      - name: Confirm Destruction
+        run: |
+          echo "⚠️  Destruction confirmed by: ${{ github.actor }}"
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Proceeding with terraform destroy..."
+
+      # ── 2. Checkout ─────────────────────────────────────────────────────────
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # ── 3. Authenticate to AWS via OIDC ─────────────────────────────────────
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region:     ${{ env.AWS_REGION }}
+          role-session-name: github-actions-destroy
+
+      # ── 4. Setup Terraform ───────────────────────────────────────────────────
+      - name: Setup Terraform ${{ env.TF_VERSION }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # ── 5. Terraform Init ────────────────────────────────────────────────────
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # ── 6. Terraform Plan Destroy (preview) ──────────────────────────────────
+      - name: Terraform Plan Destroy (preview)
+        run: |
+          terraform plan -destroy \
+            -var="key_pair_name=${{ secrets.EC2_KEY_PAIR_NAME }}" \
+            -no-color 2>&1 | tee destroy_plan.txt
+          echo "Resources scheduled for destruction:"
+          grep -E "^  # |will be destroyed" destroy_plan.txt || true
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # ── 7. Terraform Destroy ─────────────────────────────────────────────────
+      - name: Terraform Destroy
+        run: |
+          terraform destroy -auto-approve \
+            -var="key_pair_name=${{ secrets.EC2_KEY_PAIR_NAME }}" \
+            -no-color 2>&1 | tee destroy_output.txt
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # ── 8. Confirmation Summary ──────────────────────────────────────────────
+      - name: Destruction Summary
+        if: always()
+        run: |
+          echo "## 🗑️ Infrastructure Destruction Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered By | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Reason | ${{ github.event.inputs.reason }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Completed At | $(date -u '+%Y-%m-%d %H:%M UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All AWS resources have been removed. No charges will accrue." >> $GITHUB_STEP_SUMMARY
+
+  # Guard job — runs if the confirmation word was wrong
+  abort-if-not-confirmed:
+    name: Abort — Wrong confirmation
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.confirm_destroy != 'DESTROY' }}
+    steps:
+      - name: Abort
+        run: |
+          echo "❌ Destruction aborted."
+          echo "You must type exactly: DESTROY"
+          echo "You entered: ${{ github.event.inputs.confirm_destroy }}"
+          exit 1

@@ -1,0 +1,107 @@
+name: CD — Terraform Apply & Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write    # Required for AWS OIDC
+  contents: read
+
+env:
+  TF_VERSION:     "1.7.5"
+  TF_WORKING_DIR: "./terraform"
+  AWS_REGION:     "eu-west-2"
+
+jobs:
+  deploy:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # ── 2. Authenticate to AWS via OIDC ─────────────────────────────────────
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region:     ${{ env.AWS_REGION }}
+          role-session-name: github-actions-deploy
+
+      # ── 3. Setup Terraform ───────────────────────────────────────────────────
+      - name: Setup Terraform ${{ env.TF_VERSION }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # ── 4. Terraform Init ────────────────────────────────────────────────────
+      - name: Terraform Init
+        run: terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # ── 5. Terraform Plan ────────────────────────────────────────────────────
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="key_pair_name=${{ secrets.EC2_KEY_PAIR_NAME }}" \
+            -out=tfplan \
+            -no-color 2>&1 | tee plan_output.txt
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # ── 6. Terraform Apply ───────────────────────────────────────────────────
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # ── 7. Capture outputs ───────────────────────────────────────────────────
+      - name: Capture Terraform Outputs
+        id: tf_output
+        run: |
+          EC2_IP=$(terraform output -raw ec2_public_ip)
+          WEBSITE_URL=$(terraform output -raw website_url)
+          echo "ec2_ip=${EC2_IP}"         >> $GITHUB_OUTPUT
+          echo "website_url=${WEBSITE_URL}" >> $GITHUB_OUTPUT
+          echo "EC2_IP=${EC2_IP}"         >> $GITHUB_ENV
+          echo "WEBSITE_URL=${WEBSITE_URL}" >> $GITHUB_ENV
+        working-directory: ${{ env.TF_WORKING_DIR }}
+
+      # ── 8. Wait for EC2 to be ready ──────────────────────────────────────────
+      - name: Wait for EC2 User Data to complete
+        run: |
+          echo "Waiting 90 seconds for EC2 bootstrap to finish..."
+          sleep 90
+
+      # ── 9. Validate deployment ───────────────────────────────────────────────
+      - name: Validate Website is Accessible
+        run: |
+          echo "Testing: ${{ env.WEBSITE_URL }}"
+          for i in {1..10}; do
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${{ env.WEBSITE_URL }}" || echo "000")
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "✅ Website is live! HTTP $HTTP_STATUS"
+              break
+            fi
+            echo "Attempt $i — HTTP $HTTP_STATUS. Retrying in 15s..."
+            sleep 15
+          done
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "❌ Deployment validation failed after 10 attempts."
+            exit 1
+          fi
+
+      # ── 10. Deployment Summary ───────────────────────────────────────────────
+      - name: Deployment Summary
+        run: |
+          echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| EC2 Public IP | \`${{ env.EC2_IP }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Website URL | [${{ env.WEBSITE_URL }}](${{ env.WEBSITE_URL }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deploy Time | $(date -u '+%Y-%m-%d %H:%M UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered By | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
