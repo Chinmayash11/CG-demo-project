@@ -1,4 +1,4 @@
-# Capgemini Invent DevOps Demo
+# Capgemini Invent DevOps Demo 
 
 A complete end-to-end DevOps demo project that deploys a static frontend website to AWS EC2 using Terraform and GitHub Actions.
 
