@@ -81,31 +81,95 @@ jobs:
           echo "WEBSITE_URL=${WEBSITE_URL}" >> $GITHUB_ENV
         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      # ── 8. Wait for EC2 to be ready ──────────────────────────────────────────
-      - name: Wait for EC2 User Data to complete
+      # ── 8. Verify instance is running ────────────────────────────────────────
+      - name: Verify EC2 instance status
         run: |
-          echo "Waiting 90 seconds for EC2 bootstrap to finish..."
-          sleep 90
+          echo "Verifying EC2 instance is running..."
+          INSTANCE_STATE=$(aws ec2 describe-instances \
+            --instance-ids $(terraform output -raw instance_id) \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Reservations[0].Instances[0].State.Name' \
+            --output text)
+          
+          echo "Instance state: $INSTANCE_STATE"
+          
+          if [ "$INSTANCE_STATE" != "running" ]; then
+            echo "❌ Instance is not in running state"
+            exit 1
+          fi
+          echo "✅ Instance is running"
+        working-directory: ${{ env.TF_WORKING_DIR }}
 
-      # ── 9. Validate deployment ───────────────────────────────────────────────
+      # ── 9. Wait for EC2 User Data to complete ───────────────────────────────
+      - name: Wait for EC2 bootstrap and Nginx startup
+        run: |
+          echo "Waiting 180 seconds for EC2 bootstrap and Nginx to start..."
+          echo "This allows time for:"
+          echo "  • System package updates"
+          echo "  • Nginx installation"
+          echo "  • Website files deployment"
+          echo "  • Service startup"
+          echo ""
+          
+          for i in {1..18}; do
+            ELAPSED=$((i * 10))
+            echo "[$ELAPSED/180s] Waiting..."
+            sleep 10
+          done
+          
+          echo "✅ Initial wait complete. Beginning validation..."
+
+      # ── 10. Validate deployment ──────────────────────────────────────────────
       - name: Validate Website is Accessible
         run: |
-          echo "Testing: ${{ env.WEBSITE_URL }}"
-          for i in {1..10}; do
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${{ env.WEBSITE_URL }}" || echo "000")
+          echo "Testing website accessibility..."
+          echo "URL: ${{ env.WEBSITE_URL }}"
+          echo ""
+          
+          MAX_ATTEMPTS=20
+          RETRY_DELAY=10
+          HTTP_STATUS="000"
+          
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "Attempt $i/$MAX_ATTEMPTS..."
+            
+            # Try to connect with detailed error handling
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 --connect-timeout 3 "${{ env.WEBSITE_URL }}" 2>/dev/null || echo "000")
+            
             if [ "$HTTP_STATUS" = "200" ]; then
               echo "✅ Website is live! HTTP $HTTP_STATUS"
               break
+            elif [ "$HTTP_STATUS" = "000" ]; then
+              echo "   ⏳ Connection timeout/refused. Instance may still be starting..."
+            else
+              echo "   ⚠️  HTTP $HTTP_STATUS received"
             fi
-            echo "Attempt $i — HTTP $HTTP_STATUS. Retrying in 15s..."
-            sleep 15
+            
+            if [ $i -lt $MAX_ATTEMPTS ]; then
+              echo "   Retrying in ${RETRY_DELAY}s..."
+              sleep $RETRY_DELAY
+            fi
           done
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "❌ Deployment validation failed after 10 attempts."
+          
+          echo ""
+          echo "═══════════════════════════════════════════════════════════"
+          
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Validation successful!"
+            echo "Website is accessible and responding with HTTP 200"
+          else
+            echo "❌ Validation failed"
+            echo "Final HTTP status: $HTTP_STATUS"
+            echo ""
+            echo "Troubleshooting tips:"
+            echo "  1. Check EC2 instance security group allows port 80"
+            echo "  2. Verify instance has a public IP address"
+            echo "  3. SSH to instance and check: sudo systemctl status nginx"
+            echo "  4. Check user data logs: tail -f /var/log/userdata.log"
             exit 1
           fi
 
-      # ── 10. Deployment Summary ───────────────────────────────────────────────
+      # ── 11. Deployment Summary ──────────────────────────────────────────────
       - name: Deployment Summary
         run: |
           echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY

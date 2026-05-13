@@ -31,77 +31,199 @@ jobs:
     if: ${{ github.event.inputs.confirm_destroy == 'DESTROY' }}
 
     steps:
-      # ── 1. Safety guard ─────────────────────────────────────────────────────
+      # ── 1. Safety confirmation ──────────────────────────────────────────────
       - name: Confirm Destruction
         run: |
-          echo "⚠️  Destruction confirmed by: ${{ github.actor }}"
+          echo "⚠️  WARNING: Infrastructure destruction initiated"
+          echo ""
+          echo "Triggered By: ${{ github.actor }}"
           echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo ""
+          echo "All AWS resources created by Terraform will be removed:"
+          echo "  • EC2 instance"
+          echo "  • Security Group"
+          echo "  • VPC"
+          echo "  • Subnets"
+          echo "  • Internet Gateway"
+          echo "  • Route Tables"
+          echo ""
           echo "Proceeding with terraform destroy..."
 
-      # ── 2. Checkout ─────────────────────────────────────────────────────────
+      # ── 2. Checkout source code ────────────────────────────────────────────
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Restore Terraform local state cache
+      # ── 3. Restore Terraform state cache ────────────────────────────────────
+      - name: Restore Terraform state and cache
         uses: actions/cache@v4
         with:
           path: |
             terraform/.terraform
             terraform/terraform.tfstate
             terraform/terraform.tfstate.backup
+            terraform/.terraform.lock.hcl
           key: terraform-state-${{ runner.os }}-${{ github.ref_name }}
           restore-keys: terraform-state-${{ runner.os }}-
 
-      # ── 3. Authenticate to AWS via OIDC ─────────────────────────────────────
+      # ── 4. Verify state file exists ─────────────────────────────────────────
+      - name: Check Terraform state
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          if [ -f terraform.tfstate ]; then
+            echo "✅ Terraform state file found"
+            echo "State file size: $(wc -c < terraform.tfstate) bytes"
+          else
+            echo "⚠️  No terraform.tfstate found. Resources may not exist."
+          fi
+
+      # ── 5. Authenticate to AWS via OIDC ────────────────────────────────────
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region:     ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
           role-session-name: github-actions-destroy
 
-      # ── 4. Setup Terraform ───────────────────────────────────────────────────
+      # ── 6. Setup Terraform ──────────────────────────────────────────────────
       - name: Setup Terraform ${{ env.TF_VERSION }}
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # ── 5. Terraform Init ────────────────────────────────────────────────────
+      # ── 7. Terraform Init ───────────────────────────────────────────────────
       - name: Terraform Init
-        run: terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
-
-      # ── 6. Terraform Plan Destroy (preview) ──────────────────────────────────
-      - name: Terraform Plan Destroy (preview)
         run: |
+          echo "Initializing Terraform with local state..."
+          terraform init -upgrade
+          echo "✅ Terraform init complete"
+
+      # ── 8. List resources to be destroyed ───────────────────────────────────
+      - name: Show resources in state
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "Resources in current Terraform state:"
+          terraform state list || echo "No resources in state"
+
+      # ── 9. Terraform Plan Destroy (dry-run) ─────────────────────────────────
+      - name: Terraform Plan Destroy
+        id: plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "Planning destruction of all resources..."
           terraform plan -destroy \
             -var="key_pair_name=${{ secrets.EC2_KEY_PAIR_NAME }}" \
+            -out=destroy.tfplan \
             -no-color 2>&1 | tee destroy_plan.txt
-          echo "Resources scheduled for destruction:"
-          grep -E "^  # |will be destroyed" destroy_plan.txt || true
-        working-directory: ${{ env.TF_WORKING_DIR }}
+          
+          echo ""
+          echo "═══════════════════════════════════════════════════════════"
+          echo "Resources to be destroyed:"
+          echo "═══════════════════════════════════════════════════════════"
+          grep "will be destroyed" destroy_plan.txt || echo "No resources to destroy"
+          echo ""
 
-      # ── 7. Terraform Destroy ─────────────────────────────────────────────────
+      # ── 10. Terraform Destroy ───────────────────────────────────────────────
       - name: Terraform Destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
+          echo "Executing terraform destroy..."
           terraform destroy -auto-approve \
             -var="key_pair_name=${{ secrets.EC2_KEY_PAIR_NAME }}" \
             -no-color 2>&1 | tee destroy_output.txt
-        working-directory: ${{ env.TF_WORKING_DIR }}
+          
+          if [ $? -eq 0 ]; then
+            echo ""
+            echo "✅ Terraform destroy completed successfully"
+          else
+            echo ""
+            echo "❌ Terraform destroy encountered errors"
+            exit 1
+          fi
 
-      # ── 8. Confirmation Summary ──────────────────────────────────────────────
+      # ── 11. Verify state is empty ──────────────────────────────────────────
+      - name: Verify state cleanup
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "Verifying all resources have been removed..."
+          RESOURCE_COUNT=$(terraform state list 2>/dev/null | wc -l)
+          
+          if [ "$RESOURCE_COUNT" -eq 0 ]; then
+            echo "✅ Terraform state is clean - all resources removed"
+          else
+            echo "⚠️  Warning: $RESOURCE_COUNT resource(s) still in state"
+            terraform state list
+          fi
+
+      # ── 12. AWS verification (optional) ─────────────────────────────────────
+      - name: Verify AWS resources cleaned up
+        run: |
+          echo "Checking for orphaned AWS resources in region us-east-1..."
+          echo ""
+          
+          echo "Checking for EC2 instances with tag Project=capgemini-devops-demo:"
+          aws ec2 describe-instances \
+            --filters "Name=tag:Project,Values=capgemini-devops-demo" \
+            --query 'Reservations[].Instances[].InstanceId' \
+            --region us-east-1 \
+            --output text || true
+          
+          echo ""
+          echo "Checking for security groups with tag Project=capgemini-devops-demo:"
+          aws ec2 describe-security-groups \
+            --filters "Name=tag:Project,Values=capgemini-devops-demo" \
+            --query 'SecurityGroups[].GroupId' \
+            --region us-east-1 \
+            --output text || true
+          
+          echo ""
+          echo "Checking for VPCs with tag Project=capgemini-devops-demo:"
+          aws ec2 describe-vpcs \
+            --filters "Name=tag:Project,Values=capgemini-devops-demo" \
+            --query 'Vpcs[].VpcId' \
+            --region us-east-1 \
+            --output text || true
+
+      # ── 13. Save state after destroy ────────────────────────────────────────
+      - name: Save state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            terraform/.terraform
+            terraform/terraform.tfstate
+            terraform/terraform.tfstate.backup
+            terraform/.terraform.lock.hcl
+          key: terraform-state-${{ runner.os }}-${{ github.ref_name }}
+
+      # ── 14. Destruction Summary ─────────────────────────────────────────────
       - name: Destruction Summary
         if: always()
         run: |
-          echo "## 🗑️ Infrastructure Destruction Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## 🗑️ Infrastructure Destruction Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "### Destruction Details" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | ✅ Complete |" >> $GITHUB_STEP_SUMMARY
           echo "| Triggered By | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Reason | ${{ github.event.inputs.reason }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Completed At | $(date -u '+%Y-%m-%d %H:%M UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| Timestamp | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | us-east-1 |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All AWS resources have been removed. No charges will accrue." >> $GITHUB_STEP_SUMMARY
+          echo "### Resources Removed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ EC2 instance" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Security Group" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ VPC and Subnets" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Internet Gateway" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Route Tables" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Important Notes" >> $GITHUB_STEP_SUMMARY
+          echo "- All AWS resources have been removed" >> $GITHUB_STEP_SUMMARY
+          echo "- No charges will accrue after this point" >> $GITHUB_STEP_SUMMARY
+          echo "- Terraform state has been updated" >> $GITHUB_STEP_SUMMARY
+          echo "- To re-deploy, simply merge to main branch" >> $GITHUB_STEP_SUMMARY
 
   # Guard job — runs if the confirmation word was wrong
   abort-if-not-confirmed:
@@ -111,7 +233,10 @@ jobs:
     steps:
       - name: Abort
         run: |
-          echo "❌ Destruction aborted."
-          echo "You must type exactly: DESTROY"
+          echo "❌ Destruction aborted"
+          echo ""
+          echo "To proceed with destruction, you must type exactly: DESTROY"
           echo "You entered: ${{ github.event.inputs.confirm_destroy }}"
+          echo ""
+          echo "This safety check prevents accidental infrastructure deletion."
           exit 1

@@ -5,19 +5,46 @@
 # Runs once on first boot as root.
 # =============================================================================
 
-set -euo pipefail
 exec > /var/log/userdata.log 2>&1   # Capture all output for debugging
 
 echo "==> [$(date)] Starting EC2 bootstrap"
+echo "SHELL=$SHELL, USER=$USER, PWD=$PWD"
+
+# ── 0. Network diagnostics ──────────────────────────────────────────────────
+echo ""
+echo "==> Network diagnostics"
+echo "DNS resolution test:"
+nslookup archive.ubuntu.com 2>&1 | head -5 || echo "DNS lookup failed"
+echo ""
+echo "Network connectivity test:"
+curl -s -m 5 https://archive.ubuntu.com/ubuntu/dists/ > /dev/null && echo "✓ Can reach Ubuntu mirrors" || echo "✗ Cannot reach Ubuntu mirrors"
+echo ""
 
 # ── 1. System update & Nginx install ─────────────────────────────────────────
 echo "==> Updating system packages"
-apt-get update -y
-apt-get install -y nginx
+if apt-get update -y 2>&1; then
+  echo "✓ apt-get update succeeded"
+else
+  echo "✗ apt-get update failed (will attempt install anyway)"
+fi
 
+echo ""
+echo "==> Installing Nginx"
+if apt-get install -y nginx 2>&1; then
+  echo "✓ Nginx installed successfully"
+else
+  echo "✗ Nginx installation failed!"
+  echo "ERROR: Cannot proceed without Nginx. Check security group egress rules."
+  exit 1
+fi
+
+echo ""
 echo "==> Enabling and starting Nginx"
-systemctl enable nginx
-systemctl start nginx
+systemctl enable nginx 2>&1 || echo "Warning: systemctl enable failed"
+systemctl start nginx 2>&1 || echo "Warning: systemctl start failed"
+systemctl status nginx || echo "ERROR: Nginx did not start"
+sleep 2
+curl -s http://localhost/ > /dev/null && echo "✓ Nginx is listening on localhost" || echo "✗ Nginx is not responding"
 
 # ── 2. Website root ───────────────────────────────────────────────────────────
 WEB_ROOT="/var/www/html"

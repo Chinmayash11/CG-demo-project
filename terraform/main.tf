@@ -86,7 +86,7 @@ resource "aws_security_group" "web" {
   }
 
   egress {
-    description = "Allow DNS and HTTP/S outbound for OS updates"
+    description = "Allow DNS outbound for OS package lookups"
     from_port   = 53
     to_port     = 53
     protocol    = "tcp"
@@ -94,10 +94,18 @@ resource "aws_security_group" "web" {
   }
 
   egress {
-    description = "Allow DNS outbound for UDP lookups"
+    description = "Allow DNS UDP outbound"
     from_port   = 53
     to_port     = 53
     protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow HTTP outbound for package mirrors"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
