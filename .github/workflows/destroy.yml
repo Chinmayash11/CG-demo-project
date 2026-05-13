@@ -63,8 +63,8 @@ jobs:
             terraform/terraform.tfstate
             terraform/terraform.tfstate.backup
             terraform/.terraform.lock.hcl
-          key: terraform-state-${{ runner.os }}-${{ github.ref_name }}
-          restore-keys: terraform-state-${{ runner.os }}-
+          key: terraform-state-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_number }}
+          restore-keys: terraform-state-${{ runner.os }}-${{ github.ref_name }}-
 
       # ── 4. Verify state file exists ─────────────────────────────────────────
       - name: Check Terraform state
@@ -74,7 +74,10 @@ jobs:
             echo "✅ Terraform state file found"
             echo "State file size: $(wc -c < terraform.tfstate) bytes"
           else
-            echo "⚠️  No terraform.tfstate found. Resources may not exist."
+            echo "❌ Terraform state file not found"
+            echo "Terraform cannot destroy resources without the local state file."
+            echo "Ensure the CD workflow saves state or use a remote backend for shared state."
+            exit 1
           fi
 
       # ── 5. Authenticate to AWS via OIDC ────────────────────────────────────
@@ -188,14 +191,14 @@ jobs:
       # ── 13. Save state after destroy ────────────────────────────────────────
       - name: Save state cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache@v4
         with:
           path: |
             terraform/.terraform
             terraform/terraform.tfstate
             terraform/terraform.tfstate.backup
             terraform/.terraform.lock.hcl
-          key: terraform-state-${{ runner.os }}-${{ github.ref_name }}
+          key: terraform-state-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_number }}
 
       # ── 14. Destruction Summary ─────────────────────────────────────────────
       - name: Destruction Summary
