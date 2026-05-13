@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Capgemini Invent</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="logo">Capgemini Invent</div>
+      <nav>
+        <span class="nav-badge">DevOps Demo</span>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="card">
+        <div class="icon">🚀</div>
+        <h1>Hello, Welcome to Capgemini Invent</h1>
+        <div class="meta">
+          <div class="meta-item">
+            <span class="meta-label">Version</span>
+            <span class="meta-value" id="version">v1.0</span>
+          </div>
+          <div class="divider"></div>
+          <div class="meta-item">
+            <span class="meta-label">Environment</span>
+            <span class="meta-value env-badge" id="environment">Dev</span>
+          </div>
+        </div>
+        <p class="description">
+          This application is deployed on AWS EC2 using Nginx, provisioned with
+          Terraform, and delivered via a GitHub Actions CI/CD pipeline.
+        </p>
+        <div class="stack-badges">
+          <span class="badge">Terraform</span>
+          <span class="badge">GitHub Actions</span>
+          <span class="badge">AWS EC2</span>
+          <span class="badge">Nginx</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="info-grid">
+      <div class="info-card">
+        <div class="info-icon">🏗️</div>
+        <h3>Infrastructure</h3>
+        <p>VPC, Subnets, Security Groups, and EC2 provisioned with Terraform IaC.</p>
+      </div>
+      <div class="info-card">
+        <div class="info-icon">⚙️</div>
+        <h3>CI/CD Pipeline</h3>
+        <p>Automated deployments via GitHub Actions with Terraform plan and apply.</p>
+      </div>
+      <div class="info-card">
+        <div class="info-icon">🔒</div>
+        <h3>Security</h3>
+        <p>AWS OIDC authentication. No long-lived credentials stored in GitHub.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <span>© 2025 Capgemini Invent &nbsp;|&nbsp; DevOps Demo Project</span>
+      <span id="deploy-time"></span>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
