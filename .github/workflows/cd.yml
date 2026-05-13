@@ -32,8 +32,8 @@ jobs:
             terraform/.terraform
             terraform/terraform.tfstate
             terraform/terraform.tfstate.backup
-          key: terraform-state-${{ runner.os }}-${{ github.ref_name }}
-          restore-keys: terraform-state-${{ runner.os }}-
+          key: terraform-state-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_number }}
+          restore-keys: terraform-state-${{ runner.os }}-${{ github.ref_name }}-
 
       # ── 2. Authenticate to AWS via OIDC ─────────────────────────────────────
       - name: Configure AWS credentials (OIDC)
@@ -81,7 +81,18 @@ jobs:
           echo "WEBSITE_URL=${WEBSITE_URL}" >> $GITHUB_ENV
         working-directory: ${{ env.TF_WORKING_DIR }}
 
-      # ── 8. Verify instance is running ────────────────────────────────────────
+      # ── 8. Save Terraform state cache ───────────────────────────────────────
+      - name: Save Terraform state cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            terraform/.terraform
+            terraform/terraform.tfstate
+            terraform/terraform.tfstate.backup
+            terraform/.terraform.lock.hcl
+          key: terraform-state-${{ runner.os }}-${{ github.ref_name }}-${{ github.run_number }}
+
+      # ── 9. Verify instance is running ────────────────────────────────────────
       - name: Verify EC2 instance status
         run: |
           echo "Verifying EC2 instance is running..."

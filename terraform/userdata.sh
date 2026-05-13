@@ -98,6 +98,24 @@ cat > "${WEB_ROOT}/index.html" << 'HTML_EOF'
       </div>
     </section>
 
+    <section class="welcome-panel">
+      <div class="panel-card">
+        <h2>Welcome to Capgemini Invent</h2>
+        <p>Our DevOps demo shows a dynamic, modern landing experience powered by infrastructure as code and automated deployment.</p>
+      </div>
+    </section>
+
+    <section class="team-grid">
+      <div class="team-card">
+        <h3>Team Members</h3>
+        <ul id="team-list"></ul>
+      </div>
+      <div class="team-card">
+        <h3>DevOps Technologies</h3>
+        <ul id="tech-list"></ul>
+      </div>
+    </section>
+
     <section class="info-grid">
       <div class="info-card">
         <div class="info-icon">🏗️</div>
@@ -157,6 +175,15 @@ main{flex:1;max-width:1100px;margin:0 auto;width:100%;padding:3rem 1.5rem 2rem}
 .info-icon{font-size:1.75rem;margin-bottom:.75rem}
 .info-card h3{font-size:1rem;font-weight:700;color:var(--blue-dark);margin-bottom:.5rem}
 .info-card p{font-size:.875rem;color:var(--muted);line-height:1.6}
+.welcome-panel{margin:0 auto 2rem;max-width:1100px;padding:0 1.5rem}
+.panel-card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);padding:2rem; border:1px solid rgba(0,112,173,.08);text-align:center}
+.panel-card h2{font-size:clamp(1.4rem,2vw,1.75rem);color:var(--blue-dark);margin-bottom:0.75rem}
+.panel-card p{color:var(--muted);line-height:1.75}
+.team-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.25rem;margin-bottom:2rem}
+.team-card{background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow);padding:1.75rem;border:1px solid rgba(0,112,173,.08)}
+.team-card h3{font-size:1rem;font-weight:700;color:var(--blue-dark);margin-bottom:1rem}
+.team-card ul{list-style:none;padding:0;display:grid;gap:0.75rem}
+.team-card li{background:var(--blue-light);border-radius:999px;padding:0.75rem 1rem;color:var(--blue-dark);font-size:0.95rem}
 footer{background:var(--blue-dark);color:rgba(255,255,255,.7);padding:1rem 2rem;font-size:.8rem}
 .footer-inner{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem}
 @media(max-width:600px){.card{padding:2rem 1.25rem}.meta{flex-direction:column;gap:.75rem}.divider{width:60%;height:1px}.footer-inner{flex-direction:column;text-align:center}}
@@ -173,6 +200,43 @@ if (deployTimeEl) {
     " " +
     now.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
 }
+
+const teamMembers = [
+  "Aisha Patel - Release Engineer",
+  "Daniel Kim - Automation Specialist",
+  "Priya Singh - Cloud Architect",
+  "Marcus Lee - Platform Engineer",
+  "Nina Gupta - Site Reliability Engineer"
+];
+
+const devopsTech = [
+  "Terraform",
+  "GitHub Actions",
+  "AWS EC2",
+  "Nginx",
+  "IAM OIDC",
+  "Ubuntu 22.04"
+];
+
+const teamList = document.getElementById("team-list");
+const techList = document.getElementById("tech-list");
+
+if (teamList) {
+  teamMembers.forEach(member => {
+    const li = document.createElement("li");
+    li.textContent = member;
+    teamList.appendChild(li);
+  });
+}
+
+if (techList) {
+  devopsTech.forEach(tool => {
+    const li = document.createElement("li");
+    li.textContent = tool;
+    techList.appendChild(li);
+  });
+}
+
 console.log("%cCapgemini Invent DevOps Demo","color:#0070ad;font-size:1.1rem;font-weight:bold;");
 JS_EOF
 
