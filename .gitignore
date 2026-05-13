@@ -1,0 +1,12 @@
+# Terraform local state and working files
+terraform/.terraform
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform.lock.hcl
+
+# GitHub Actions workflow artifacts
+.github/workflows/*.txt
+
+# OS files
+.DS_Store
+Thumbs.db

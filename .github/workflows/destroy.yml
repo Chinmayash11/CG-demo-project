@@ -41,6 +41,16 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Restore Terraform local state cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            terraform/.terraform
+            terraform/terraform.tfstate
+            terraform/terraform.tfstate.backup
+          key: terraform-state-${{ runner.os }}-${{ github.ref_name }}
+          restore-keys: terraform-state-${{ runner.os }}-
+
       # ── 3. Authenticate to AWS via OIDC ─────────────────────────────────────
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
