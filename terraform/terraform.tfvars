@@ -1,5 +1,5 @@
 # ── Required: fill these in before running terraform apply ────────────────────
-key_pair_name = "your-key-pair-name"   # Name of your existing EC2 Key Pair
+key_pair_name = "your-key-pair-name" # Name of your existing EC2 Key Pair
 
 # ── Optional overrides ────────────────────────────────────────────────────────
 aws_region         = "eu-west-2"

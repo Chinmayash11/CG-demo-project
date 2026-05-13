@@ -31,7 +31,7 @@ variable "public_subnet_cidr" {
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
-  default     = "t2.micro"   # Free-tier eligible
+  default     = "t2.micro" # Free-tier eligible
 }
 
 variable "key_pair_name" {
@@ -42,5 +42,5 @@ variable "key_pair_name" {
 variable "allowed_ssh_cidr" {
   description = "CIDR allowed to SSH into the instance (restrict to your IP in production)"
   type        = string
-  default     = "0.0.0.0/0"   # Restrict this for real deployments
+  default     = "0.0.0.0/0" # Restrict this for real deployments
 }
