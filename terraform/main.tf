@@ -15,8 +15,8 @@ data "aws_ami" "ubuntu" {
 }
 
 # ── VPC ───────────────────────────────────────────────────────────────────────
-# checkov:skip=CKV_AWS_11: "VPC flow logs are not enabled for this lightweight demo"
-# checkov:skip=CKV_AWS_12: "Default security group is not managed in this lightweight demo"
+# checkov:skip=CKV2_AWS_11: "VPC flow logs are not enabled for this lightweight demo"
+# checkov:skip=CKV2_AWS_12: "Default security group is not managed in this lightweight demo"
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
@@ -33,8 +33,8 @@ resource "aws_internet_gateway" "igw" {
 }
 
 # ── Public Subnet ─────────────────────────────────────────────────────────────
-# checkov:skip=CKV_AWS_130: "Public subnet is required for this demo EC2 instance"
-# checkov:skip=CKV_AWS_24: "Public IP assignment is required for this demo EC2 instance"
+# checkov:skip=CKV2_AWS_130: "Public subnet is required for this demo EC2 instance"
+# checkov:skip=CKV2_AWS_24: "Public IP assignment is required for this demo EC2 instance"
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.public_subnet_cidr
@@ -63,8 +63,8 @@ resource "aws_route_table_association" "public" {
 
 # ── Security Group ────────────────────────────────────────────────────────────
 resource "aws_security_group" "web" {
-  # checkov:skip=CKV_AWS_260: "Public HTTP access is required for this demo website"
-  # checkov:skip=CKV_AWS_12: "Default security group is not managed in this lightweight demo"
+  # checkov:skip=CKV2_AWS_260: "Public HTTP access is required for this demo website"
+  # checkov:skip=CKV2_AWS_12: "Default security group is not managed in this lightweight demo"
   description = "Allow HTTP and SSH inbound"
   name        = "${var.project_name}-web-sg"
   vpc_id      = aws_vpc.main.id
@@ -126,6 +126,9 @@ resource "aws_instance" "web" {
     http_endpoint               = "enabled"
     http_put_response_hop_limit = 2
   }
+
+  monitoring    = true
+  ebs_optimized = true
 
   user_data = file("${path.module}/userdata.sh")
 
