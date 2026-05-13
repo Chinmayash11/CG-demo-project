@@ -2,7 +2,7 @@
 key_pair_name = "your-key-pair-name" # Name of your existing EC2 Key Pair
 
 # ── Optional overrides ────────────────────────────────────────────────────────
-aws_region         = "eu-west-2"
+aws_region         = "us-east-1"
 environment        = "Dev"
 project_name       = "capgemini-demo"
 vpc_cidr           = "10.0.0.0/16"

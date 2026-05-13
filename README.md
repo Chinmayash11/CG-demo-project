@@ -1,18 +1,19 @@
 # Capgemini Invent DevOps Demo
 
-A minimal end-to-end DevOps demo project that deploys a static frontend website to AWS EC2 using Terraform and GitHub Actions.
+A complete end-to-end DevOps demo project that deploys a static frontend website to AWS EC2 using Terraform and GitHub Actions.
 
-## Project Overview
+## Project Summary
 
-This repository demonstrates a beginner-friendly DevOps workflow with:
-- Static website built with HTML, CSS, and JavaScript
-- AWS infrastructure deployed with Terraform
-- EC2 Ubuntu instance running Nginx
-- GitHub Actions CI pipeline for Terraform validation and security scanning
-- GitHub Actions CD pipeline using AWS OIDC to apply Terraform
-- Manual destroy workflow to clean up AWS resources
+This project demonstrates a beginner-friendly but realistic DevOps workflow with:
+- A static website built with HTML, CSS, and JavaScript
+- AWS infrastructure provisioned using Terraform
+- An Ubuntu EC2 instance running Nginx to serve the site
+- GitHub Actions CI workflow for Terraform formatting, validation, and security scanning
+- GitHub Actions CD workflow using AWS OIDC for Terraform apply
+- A manual destroy workflow for safe AWS cleanup
+- Local Terraform state only, suitable for a demo
 
-## Repository Structure
+## Project Structure
 
 ```
 .
@@ -36,43 +37,64 @@ This repository demonstrates a beginner-friendly DevOps workflow with:
     └── app.js
 ```
 
-## What Each File Does
+## What Files Do
 
-- `terraform/main.tf`: Defines AWS VPC, public subnet, internet gateway, route table, security group, and EC2 instance.
+- `terraform/main.tf`: Creates VPC, public subnet, internet gateway, route table, security group, and EC2 instance.
 - `terraform/provider.tf`: Configures the AWS provider and default tags.
-- `terraform/variables.tf`: Declares configurable deployment variables.
-- `terraform/outputs.tf`: Exposes EC2 public IP, website URL, instance ID, VPC ID, and SSH command.
-- `terraform/userdata.sh`: EC2 user data script that installs Nginx and deploys the static website to `/var/www/html`.
-- `terraform/terraform.tfvars`: Example Terraform variable values. Update this before deployment.
-- `website/index.html`: Static site markup and content.
-- `website/style.css`: Responsive styling for the frontend.
-- `website/app.js`: Client-side script that shows deployment metadata in console and page footer.
-- `.github/workflows/ci.yml`: Pull request/push CI workflow for formatting, validation, and Checkov security scanning.
-- `.github/workflows/cd.yml`: Main branch deployment workflow that applies Terraform using AWS OIDC.
-- `.github/workflows/destroy.yml`: Manual cleanup workflow to destroy the Terraform-managed infrastructure.
+- `terraform/variables.tf`: Declares input variables for AWS region, environment, instance type, SSH CIDR, and more.
+- `terraform/outputs.tf`: Exposes outputs including public IP, website URL, instance ID, VPC ID, and SSH command.
+- `terraform/userdata.sh`: EC2 bootstrap script that installs Nginx and writes the static site into `/var/www/html`.
+- `terraform/terraform.tfvars`: Example values for local deployment.
+- `website/index.html`: Static HTML landing page for the demo website.
+- `website/style.css`: Responsive CSS styling for the frontend.
+- `website/app.js`: Lightweight JavaScript for timestamp and console metadata.
+- `.github/workflows/ci.yml`: Runs on PRs and branch pushes to validate Terraform and run Checkov.
+- `.github/workflows/cd.yml`: Runs on `main` merges to apply Terraform using AWS OIDC.
+- `.github/workflows/destroy.yml`: Manual `workflow_dispatch` cleanup of Terraform-managed AWS resources.
 
-## Prerequisites
+## Demo Behavior
 
-1. AWS account with permissions to create VPC, EC2, IAM, and networking resources.
-2. GitHub repository that uses GitHub Actions.
-3. Existing EC2 Key Pair in the chosen AWS region.
-4. GitHub OIDC-enabled IAM role and `AWS_ROLE_ARN` secret configured in GitHub.
-5. GitHub secret `EC2_KEY_PAIR_NAME` set to your EC2 key pair name.
+The website shows:
+- `Hello, Welcome to Capgemini Invent`
+- `Version: v1.0`
+- `Environment: Dev`
+
+It uses a simple responsive layout with a header, hero card, info cards, and footer.
+
+## AWS Infra Details
+
+Terraform provisions:
+- `aws_vpc.main` with `10.0.0.0/16`
+- `aws_subnet.public` with `10.0.1.0/24` and public IP mapping
+- `aws_internet_gateway.igw`
+- `aws_route_table.public`
+- `aws_security_group.web` allowing HTTP port `80` and SSH port `22`
+- `aws_instance.web` using latest Ubuntu 22.04 and EC2 user data for Nginx
+
+### Security notes for this demo
+
+- HTTP port `80` is open for public website access.
+- SSH is restricted by `allowed_ssh_cidr` in `terraform/terraform.tfvars`.
+- EC2 metadata requires IMDSv2.
+- Local Terraform state is used for simplicity.
+
+## AWS Region
+
+The default AWS region is `us-east-1`.
 
 ## GitHub Secrets Required
 
-- `AWS_ROLE_ARN`: IAM role ARN with trust relationship for GitHub Actions OIDC.
-- `EC2_KEY_PAIR_NAME`: EC2 key pair name used for the Ubuntu instance.
+Add these secrets to your GitHub repository:
+- `AWS_ROLE_ARN`: IAM OIDC role ARN used by GitHub Actions.
+- `EC2_KEY_PAIR_NAME`: EC2 Key Pair name for SSH access.
 
 ## Optional GitHub Secrets
 
-- `AWS_REGION`: if you want to override the default AWS region (`eu-west-2`).
+- `AWS_REGION`: override the default region if needed.
 
-## AWS IAM Role Requirements
+## Example IAM Configuration
 
-The GitHub OIDC role should have a trust policy for GitHub Actions and a minimum permission policy such as the example below.
-
-### Example Trust Policy
+### IAM Trust Policy for GitHub OIDC
 
 ```json
 {
@@ -94,7 +116,7 @@ The GitHub OIDC role should have a trust policy for GitHub Actions and a minimum
 }
 ```
 
-### Example IAM Policy
+### Example IAM Permissions
 
 ```json
 {
@@ -105,28 +127,15 @@ The GitHub OIDC role should have a trust policy for GitHub Actions and a minimum
       "Action": [
         "ec2:Describe*",
         "ec2:CreateSecurityGroup",
-        "ec2:CreateKeyPair",
-        "ec2:DeleteSecurityGroup",
         "ec2:AuthorizeSecurityGroupIngress",
         "ec2:RevokeSecurityGroupIngress",
         "ec2:CreateTags",
         "ec2:DeleteTags",
         "ec2:RunInstances",
         "ec2:TerminateInstances",
-        "ec2:StopInstances",
-        "ec2:StartInstances",
-        "ec2:TerminateInstances",
         "ec2:CreateVolume",
         "ec2:DeleteVolume",
         "ec2:AttachVolume",
-        "ec2:DescribeVpcs",
-        "ec2:DescribeSubnets",
-        "ec2:DescribeRouteTables",
-        "ec2:DescribeSecurityGroups",
-        "ec2:DescribeImages",
-        "ec2:ModifyInstanceAttribute",
-        "ec2:DeleteSecurityGroup",
-        "iam:ListInstanceProfiles",
         "iam:PassRole"
       ],
       "Resource": "*"
@@ -135,15 +144,24 @@ The GitHub OIDC role should have a trust policy for GitHub Actions and a minimum
 }
 ```
 
-> Note: For a demo, a broad policy can be acceptable, but for production you should tighten IAM permissions further.
+> Note: This example policy is demo-oriented. For production, tighten permissions and use least privilege.
 
-## Deployment Steps
+## Setup and Deployment
 
-1. Clone the repository.
-2. Update `terraform/terraform.tfvars`:
-   - Set `key_pair_name` to your EC2 key pair.
-   - Optionally restrict `allowed_ssh_cidr` to your public IP.
-3. Run locally for validation:
+### 1. Clone the repository
+
+```bash
+git clone <repo-url>
+cd CG-demo-project
+```
+
+### 2. Configure Terraform variables
+
+Open `terraform/terraform.tfvars` and set:
+- `key_pair_name` to your existing EC2 key pair
+- `allowed_ssh_cidr` to your own public IP, e.g. `203.0.113.5/32`
+
+### 3. Validate locally
 
 ```bash
 cd terraform
@@ -152,13 +170,22 @@ terraform fmt -check -recursive
 terraform validate
 ```
 
-4. Push the repository to GitHub.
-5. Create a pull request or push to a feature branch to run the CI workflow (`.github/workflows/ci.yml`).
-6. Merge into `main` to trigger the CD workflow (`.github/workflows/cd.yml`).
+### 4. Push to GitHub
 
-> GitHub Actions caches the local Terraform state file and `.terraform` folder for the main branch so the demo can track deployed resources without a remote backend.
+Commit and push your changes.
 
-## Local Deployment Commands
+### 5. Run CI
+
+- `ci.yml` runs on PRs and non-main pushes.
+- It checks Terraform formatting, validates config, and runs Checkov.
+
+### 6. Deploy on merge to `main`
+
+- `cd.yml` runs on pushes to `main`.
+- It authenticates with AWS OIDC, runs `terraform init`, `terraform plan`, and `terraform apply`.
+- After apply, it validates the website endpoint.
+
+## Local Terraform Commands
 
 ```bash
 cd terraform
@@ -167,44 +194,49 @@ terraform plan -var="key_pair_name=<your-key-pair-name>"
 terraform apply -auto-approve -var="key_pair_name=<your-key-pair-name>"
 ```
 
-## Validation
+## Destroy / Cleanup
 
-- Confirm Terraform plan and apply succeed.
-- Access the website via the EC2 public IP output from Terraform.
-- Confirm the page shows:
-  - `Hello, Welcome to Capgemini Invent`
-  - `Version: v1.0`
-  - `Environment: Dev`
-- Confirm GitHub Actions completed successfully.
+### GitHub workflow cleanup
 
-## Clean Up
-
-1. Open the GitHub Actions tab.
+1. Open GitHub Actions.
 2. Run the `Destroy — Terraform Infrastructure Cleanup` workflow.
 3. Enter `DESTROY` to confirm.
 
-## Architecture Summary
+### Local cleanup command
 
-- GitHub Actions CI validates Terraform and runs a security scan.
-- GitHub Actions CD uses AWS OIDC to authenticate without long-lived AWS credentials.
-- Terraform provisions:
-  - VPC, public subnet, internet gateway, route table
-  - Security group allowing SSH and HTTP
-  - Ubuntu EC2 instance
-- EC2 User Data installs Nginx and deploys the static website to `/var/www/html`.
-- The destroy workflow safely removes all Terraform-managed infrastructure.
+```bash
+cd terraform
+terraform destroy -auto-approve -var="key_pair_name=<your-key-pair-name>"
+```
+
+## Validation Checklist
+
+- [ ] `terraform fmt -check -recursive` passes
+- [ ] `terraform validate` passes
+- [ ] CI workflow runs successfully on PR or branch push
+- [ ] CD workflow runs successfully on `main`
+- [ ] Website is reachable at `http://<EC2_PUBLIC_IP>`
+- [ ] Website displays the demo content
 
 ## Troubleshooting
 
-- If Terraform format fails, run `terraform fmt -recursive`.
-- If Terraform validate fails, inspect the output and fix syntax or variables.
-- If the website does not load:
-  - Confirm the EC2 instance is in a public subnet.
-  - Confirm the security group allows port 80.
-  - Confirm EC2 user data executed successfully by checking `/var/log/userdata.log` on the instance.
-- If AWS OIDC fails, verify the `AWS_ROLE_ARN` secret and IAM trust policy.
-- Use `terraform destroy -auto-approve -var="key_pair_name=<your-key-pair-name>"` for local cleanup if needed.
+- If formatting fails, run:
+  ```bash
+  terraform fmt -recursive
+  ```
+- If validation fails, inspect the Terraform error output.
+- If the website is not reachable:
+  - Confirm the EC2 instance is in the public subnet.
+  - Confirm security group allows inbound port `80`.
+  - Confirm Nginx started successfully on the instance.
+- If OIDC auth fails, verify `AWS_ROLE_ARN` and IAM trust policy.
+- If destroy fails, inspect GitHub Actions logs and rerun after fixing state.
 
-## Expected Output
+## Expected Result
 
-After successful deployment, the website should appear at `http://<EC2_PUBLIC_IP>` and display the demo content with header, footer, version, and environment values.
+After deployment, the demo site should be available at `http://<EC2_PUBLIC_IP>` and display:
+- `Hello, Welcome to Capgemini Invent`
+- `Version: v1.0`
+- `Environment: Dev`
+
+The project is now documented for a full demo workflow, including AWS provisioning, deployment, validation, and cleanup.
